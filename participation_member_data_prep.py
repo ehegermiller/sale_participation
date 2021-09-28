@@ -40,36 +40,26 @@ user_state_df = user_state_df[[
   , 'acq_discount_cohort'
   , 'acq_box_type'
   , 'acq_type'
-  , 'boost_non_sub_participation_ind'
-  , 'refills_non_sub_participation_ind'
-  , 'choice_non_sub_participation_ind'
   , 'addon_non_sub_participation_ind'
   , 'edit_non_sub_participation_ind'
   , 'promo_non_sub_participation_ind'
   , 'shop_non_sub_participation_ind'
   , 'customize_participation_ind'
-  , 'non_sub_cash_collected_amount'
-  , 'non_sub_invoice_number_count'
+  , 'addon_non_sub_cash_collected_amount'
+  , 'edit_non_sub_cash_collected_amount'
+  , 'promo_non_sub_cash_collected_amount'
+  , 'shop_non_sub_cash_collected_amount'
   , 'addon_non_sub_discount_amount'
-  , 'boost_non_sub_discount_amount'
-  , 'choice_non_sub_discount_amount'
   , 'edit_non_sub_discount_amount'
   , 'promo_non_sub_discount_amount'
-  , 'refills_non_sub_discount_amount'
   , 'shop_non_sub_discount_amount'
   , 'addon_non_sub_shipping_amount'
-  , 'boost_non_sub_shipping_amount'
-  , 'choice_non_sub_shipping_amount'
   , 'edit_non_sub_shipping_amount'
   , 'promo_non_sub_shipping_amount'
-  , 'refills_non_sub_shipping_amount'
   , 'shop_non_sub_shipping_amount'
   , 'addon_non_sub_coupon_code'
-  , 'boost_non_sub_coupon_code'
-  , 'choice_non_sub_coupon_code'
   , 'edit_non_sub_coupon_code'
   , 'promo_non_sub_coupon_code'
-  , 'refills_non_sub_coupon_code'
   , 'shop_non_sub_coupon_code'
   , 'csat_satisfied_ind'
   , 'subscriber_days_prior_cume'
@@ -126,18 +116,12 @@ in_last_100_days_window = Window.partitionBy('account_code').orderBy(col('date')
 df = df \
 .withColumn('acq_date', to_date('acq_timestamp')) \
 .withColumn('months_since_acq', months_between(col('date'), col('acq_date'))) \
-.withColumn("agg_participation_ind", when(df.boost_non_sub_participation_ind == 1, 1) \
-  .when(df.refills_non_sub_participation_ind == 1, 1)
-  .when(df.choice_non_sub_participation_ind == 1, 1)
-  .when(df.addon_non_sub_participation_ind == 1, 1)
+.withColumn("agg_participation_ind", when(df.addon_non_sub_participation_ind == 1, 1) \
   .when(df.edit_non_sub_participation_ind == 1, 1)
   .when(df.promo_non_sub_participation_ind == 1, 1)
   .when(df.shop_non_sub_participation_ind == 1, 1)
   .otherwise(0)) \
-.withColumn("participation_count", col("boost_non_sub_participation_ind") \
-                   + col("refills_non_sub_participation_ind") \
-                   + col("choice_non_sub_participation_ind") \
-                   + col("addon_non_sub_participation_ind") \
+.withColumn("participation_count", col("addon_non_sub_participation_ind") \
                    + col("edit_non_sub_participation_ind") \
                    + col("promo_non_sub_participation_ind") \
                    + col("shop_non_sub_participation_ind")) \
@@ -161,54 +145,75 @@ df = df \
 
 # COMMAND ----------
 
-df = df \
-.withColumn('total_discount_amt', col('addon_non_sub_discount_amount') 
-            + col('boost_non_sub_discount_amount') 
-            + col('choice_non_sub_discount_amount') 
-            + col('edit_non_sub_discount_amount') 
-            + col('promo_non_sub_discount_amount') 
-            + col('refills_non_sub_discount_amount') 
-            + col('shop_non_sub_discount_amount')) \
-.withColumn('total_shipping_amt', col('addon_non_sub_shipping_amount') 
-            + col('boost_non_sub_shipping_amount') 
-            + col('choice_non_sub_shipping_amount') 
-            + col('edit_non_sub_shipping_amount') 
-            + col('promo_non_sub_shipping_amount') 
-            + col('refills_non_sub_shipping_amount')
-            + col('shop_non_sub_shipping_amount')) \
-.withColumn('total_order_revenue', col('non_sub_cash_collected_amount') - col('total_discount_amt') + col('total_shipping_amt')) \
-.withColumn('avg_order_revenue', col('total_order_revenue') / col('non_sub_invoice_number_count')) \
-.withColumn('last_order_revenue', last(col('total_order_revenue'), ignorenulls=True).over(user_lifetime_current_day_window)) 
+revenue_member_sku_df = spark.read \
+  .format('delta') \
+  .load('s3://s3-datascience-prod/user_state/all_rev_by_mem_and_sku') 
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Drop columns no longer needed
+# MAGIC ##### Calculating invoice number count by member by day for addon, shop, edit, and promo sales  
+# MAGIC *can't use non_sub_invoice_number_count in user_state as this include refills, boost, and addt'l choice invoices
 
 # COMMAND ----------
 
-df = df.drop('acq_date'
-             , 'acq_ind'
-             , 'acq_timestamp'
-             , 'future_expires_at_date'
-             , 'days_to_expiration'
-             , 'total_discount_amt'
-             , 'total_shipping_amt'
-             , 'addon_non_sub_discount_amount' 
-             , 'boost_non_sub_discount_amount'
-             , 'choice_non_sub_discount_amount'
-             , 'edit_non_sub_discount_amount'
-             , 'promo_non_sub_discount_amount'
-             , 'refills_non_sub_discount_amount'
-             , 'shop_non_sub_discount_amount'
-             , 'addon_non_sub_shipping_amount' 
-             , 'boost_non_sub_shipping_amount'
-             , 'choice_non_sub_shipping_amount'
-             , 'edit_non_sub_shipping_amount' 
-             , 'promo_non_sub_shipping_amount'
-             , 'refills_non_sub_shipping_amount'
-             , 'shop_non_sub_shipping_amount'
-            )
+invoice_count_df = revenue_member_sku_df \
+  .filter(col('subchannel').isin(['Addon', 'Edit', 'Incremental', 'New Member Addon', 'Shop'])) \
+  .select('account_code', 'invoice_closed_at_date', 'invoice_number') \
+  .withColumn('date', date_format(col('invoice_closed_at_date'), 'yyyy-MM-dd')) \
+  .withColumn('account_code', lower(trim(col('account_code')))) \
+  .drop('invoice_closed_at_date') \
+  .groupBy('account_code', 'date') \
+  .agg(
+    approx_count_distinct('invoice_number').alias('ecomm_invoice_number_count')
+  ).na.fill(0) \
+  .cache()
+
+# COMMAND ----------
+
+display(invoice_count_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC QA invoice count column
+
+# COMMAND ----------
+
+# qa = invoice_count_df.filter(col('account_code') == 'jilleverboort@gmail.com') \
+# .filter(col('date') == '2020-04-21')
+# display(qa)
+
+# COMMAND ----------
+
+# %sql
+# select * from public.revenue_member_sku
+# where account_code = 'jilleverboort@gmail.com'
+# and cast(invoice_created_at_date as date) = '2020-04-21'
+
+# COMMAND ----------
+
+# Join the invoice count to the main dataframe
+df = df.join(invoice_count_df, how='left', on=['account_code', 'date'])
+
+# COMMAND ----------
+
+df = df \
+.withColumn('total_cash_collected_amt', col('addon_non_sub_cash_collected_amount') 
+            + col('edit_non_sub_cash_collected_amount') 
+            + col('promo_non_sub_cash_collected_amount') 
+            + col('shop_non_sub_cash_collected_amount')) \
+.withColumn('total_discount_amt', col('addon_non_sub_discount_amount') 
+            + col('edit_non_sub_discount_amount') 
+            + col('promo_non_sub_discount_amount') 
+            + col('shop_non_sub_discount_amount')) \
+.withColumn('total_shipping_amt', col('addon_non_sub_shipping_amount') 
+            + col('edit_non_sub_shipping_amount') 
+            + col('promo_non_sub_shipping_amount') 
+            + col('shop_non_sub_shipping_amount')) \
+.withColumn('total_order_revenue', col('total_cash_collected_amt') - col('total_discount_amt') + col('total_shipping_amt')) \
+.withColumn('avg_order_revenue', col('total_order_revenue') / col('ecomm_invoice_number_count')) \
+.withColumn('last_order_revenue', last(col('total_order_revenue'), ignorenulls=True).over(user_lifetime_current_day_window)) 
 
 # COMMAND ----------
 
@@ -263,11 +268,8 @@ df = df \
 .withColumn('acq_box_type', when(col('acq_box_type').isNull(), 'N/A').otherwise(col('acq_box_type'))) \
 .withColumn('acq_type', when(col('acq_type').isNull(), 'N/A').otherwise(col('acq_type'))) \
 .withColumn('addon_non_sub_coupon_code', when(col('addon_non_sub_coupon_code').isNull(), 'N/A').when(col('addon_non_sub_coupon_code') == '', 'Blank').otherwise(col('addon_non_sub_coupon_code'))) \
-.withColumn('boost_non_sub_coupon_code', when(col('boost_non_sub_coupon_code').isNull(), 'N/A').when(col('boost_non_sub_coupon_code') == '', 'Blank').otherwise(col('boost_non_sub_coupon_code'))) \
-.withColumn('choice_non_sub_coupon_code', when(col('choice_non_sub_coupon_code').isNull(), 'N/A').when(col('choice_non_sub_coupon_code') == '', 'Blank').otherwise(col('choice_non_sub_coupon_code'))) \
 .withColumn('edit_non_sub_coupon_code', when(col('edit_non_sub_coupon_code').isNull(), 'N/A').when(col('edit_non_sub_coupon_code') == '', 'Blank').otherwise(col('edit_non_sub_coupon_code'))) \
 .withColumn('promo_non_sub_coupon_code', when(col('promo_non_sub_coupon_code').isNull(), 'N/A').when(col('promo_non_sub_coupon_code') == '', 'Blank').otherwise(col('promo_non_sub_coupon_code'))) \
-.withColumn('refills_non_sub_coupon_code', when(col('refills_non_sub_coupon_code').isNull(), 'N/A').when(col('refills_non_sub_coupon_code') == '', 'Blank').otherwise(col('refills_non_sub_coupon_code'))) \
 .withColumn('shop_non_sub_coupon_code', when(col('shop_non_sub_coupon_code').isNull(), 'N/A').when(col('shop_non_sub_coupon_code') == '', 'Blank').otherwise(col('shop_non_sub_coupon_code'))) \
 .withColumn('csat_satisfied_ind', when(col('csat_satisfied_ind').isNull(), 'N/A').otherwise(col('csat_satisfied_ind'))) \
 .withColumn('months_since_acq', round(col('months_since_acq'), 2)) \
@@ -290,7 +292,7 @@ df = df \
 
 # COMMAND ----------
 
-df.columns
+# df.columns
 
 # COMMAND ----------
 
@@ -299,8 +301,8 @@ df.columns
 
 # COMMAND ----------
 
-age = df.groupBy('uc_age').agg(countDistinct(col('account_code')).alias('count'))
-display(age.orderBy('uc_age'))
+# age = df.groupBy('uc_age').agg(countDistinct(col('account_code')).alias('count'))
+# display(age.orderBy('uc_age'))
 
 # COMMAND ----------
 
@@ -309,8 +311,8 @@ display(age.orderBy('uc_age'))
 
 # COMMAND ----------
 
-plan_code = df.groupBy('plan_code').agg(countDistinct(col('account_code')).alias('count'))
-display(plan_code.orderBy('plan_code'))
+# plan_code = df.groupBy('plan_code').agg(countDistinct(col('account_code')).alias('count'))
+# display(plan_code.orderBy('plan_code'))
 
 # COMMAND ----------
 
@@ -319,7 +321,7 @@ display(plan_code.orderBy('plan_code'))
 
 # COMMAND ----------
 
-df.select('order_season').distinct().show()
+# df.select('order_season').distinct().show()
 
 # COMMAND ----------
 
@@ -328,8 +330,8 @@ df.select('order_season').distinct().show()
 
 # COMMAND ----------
 
-zipcode = df.groupBy('uc_zipcode_median_income').agg(countDistinct(col('account_code')).alias('count'))
-display(zipcode.orderBy('uc_zipcode_median_income'))
+# zipcode = df.groupBy('uc_zipcode_median_income').agg(countDistinct(col('account_code')).alias('count'))
+# display(zipcode.orderBy('uc_zipcode_median_income'))
 
 # COMMAND ----------
 
@@ -338,8 +340,8 @@ display(zipcode.orderBy('uc_zipcode_median_income'))
 
 # COMMAND ----------
 
-regions = df.groupBy('uc_user_region').agg(countDistinct(col('account_code')).alias('count'))
-display(regions.orderBy('uc_user_region'))
+# regions = df.groupBy('uc_user_region').agg(countDistinct(col('account_code')).alias('count'))
+# display(regions.orderBy('uc_user_region'))
 
 # COMMAND ----------
 
@@ -348,8 +350,8 @@ display(regions.orderBy('uc_user_region'))
 
 # COMMAND ----------
 
-nps_base = df.groupBy('nps_base').agg(countDistinct(col('account_code')).alias('count'))
-display(nps_base.orderBy('nps_base'))
+# nps_base = df.groupBy('nps_base').agg(countDistinct(col('account_code')).alias('count'))
+# display(nps_base.orderBy('nps_base'))
 
 # COMMAND ----------
 
@@ -358,8 +360,8 @@ display(nps_base.orderBy('nps_base'))
 
 # COMMAND ----------
 
-sub_days = df.groupBy('subscriber_days_prior_cume').agg(countDistinct(col('account_code')).alias('count'))
-display(sub_days.orderBy('subscriber_days_prior_cume'))
+# sub_days = df.groupBy('subscriber_days_prior_cume').agg(countDistinct(col('account_code')).alias('count'))
+# display(sub_days.orderBy('subscriber_days_prior_cume'))
 
 # COMMAND ----------
 
@@ -368,8 +370,8 @@ display(sub_days.orderBy('subscriber_days_prior_cume'))
 
 # COMMAND ----------
 
-acq_disc = df.groupBy('acq_discount_cohort').agg(countDistinct(col('account_code')).alias('count'))
-display(acq_disc.orderBy('acq_discount_cohort'))
+# acq_disc = df.groupBy('acq_discount_cohort').agg(countDistinct(col('account_code')).alias('count'))
+# display(acq_disc.orderBy('acq_discount_cohort'))
 
 # COMMAND ----------
 
@@ -378,8 +380,8 @@ display(acq_disc.orderBy('acq_discount_cohort'))
 
 # COMMAND ----------
 
-acq = df.groupBy('acq_box_type').agg(countDistinct(col('account_code')).alias('count'))
-display(acq.orderBy('acq_box_type'))
+# acq = df.groupBy('acq_box_type').agg(countDistinct(col('account_code')).alias('count'))
+# display(acq.orderBy('acq_box_type'))
 
 # COMMAND ----------
 
@@ -388,8 +390,8 @@ display(acq.orderBy('acq_box_type'))
 
 # COMMAND ----------
 
-acq_type = df.groupBy('acq_type').agg(countDistinct(col('account_code')).alias('count'))
-display(acq_type.orderBy('acq_type'))
+# acq_type = df.groupBy('acq_type').agg(countDistinct(col('account_code')).alias('count'))
+# display(acq_type.orderBy('acq_type'))
 
 # COMMAND ----------
 
@@ -398,28 +400,8 @@ display(acq_type.orderBy('acq_type'))
 
 # COMMAND ----------
 
-addon = df.groupBy('addon_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
-display(addon.orderBy('addon_non_sub_coupon_code'))
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### boost_non_sub_coupon_code
-
-# COMMAND ----------
-
-boost = df.groupBy('boost_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
-display(boost.orderBy('boost_non_sub_coupon_code'))
-
-# COMMAND ----------
-
-# MAGIC %md 
-# MAGIC #### choice_non_sub_coupon_code
-
-# COMMAND ----------
-
-choice = df.groupBy('choice_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
-display(choice.orderBy('choice_non_sub_coupon_code'))
+# addon = df.groupBy('addon_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
+# display(addon.orderBy('addon_non_sub_coupon_code'))
 
 # COMMAND ----------
 
@@ -428,8 +410,8 @@ display(choice.orderBy('choice_non_sub_coupon_code'))
 
 # COMMAND ----------
 
-edit = df.groupBy('edit_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
-display(edit.orderBy('edit_non_sub_coupon_code'))
+# edit = df.groupBy('edit_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
+# display(edit.orderBy('edit_non_sub_coupon_code'))
 
 # COMMAND ----------
 
@@ -438,18 +420,8 @@ display(edit.orderBy('edit_non_sub_coupon_code'))
 
 # COMMAND ----------
 
-promo = df.groupBy('promo_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
-display(promo.orderBy('promo_non_sub_coupon_code'))
-
-# COMMAND ----------
-
-# MAGIC %md 
-# MAGIC #### refills_non_sub_coupon_code
-
-# COMMAND ----------
-
-refills = df.groupBy('refills_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
-display(refills.orderBy('refills_non_sub_coupon_code'))
+# promo = df.groupBy('promo_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
+# display(promo.orderBy('promo_non_sub_coupon_code'))
 
 # COMMAND ----------
 
@@ -458,8 +430,8 @@ display(refills.orderBy('refills_non_sub_coupon_code'))
 
 # COMMAND ----------
 
-shop = df.groupBy('shop_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
-display(shop.orderBy('shop_non_sub_coupon_code'))
+# shop = df.groupBy('shop_non_sub_coupon_code').agg(countDistinct(col('account_code')).alias('count'))
+# display(shop.orderBy('shop_non_sub_coupon_code'))
 
 # COMMAND ----------
 
@@ -468,8 +440,8 @@ display(shop.orderBy('shop_non_sub_coupon_code'))
 
 # COMMAND ----------
 
-csat = df.groupBy('csat_satisfied_ind').agg(countDistinct(col('account_code')).alias('count'))
-display(csat.orderBy('csat_satisfied_ind'))
+# csat = df.groupBy('csat_satisfied_ind').agg(countDistinct(col('account_code')).alias('count'))
+# display(csat.orderBy('csat_satisfied_ind'))
 
 # COMMAND ----------
 
@@ -478,8 +450,8 @@ display(csat.orderBy('csat_satisfied_ind'))
 
 # COMMAND ----------
 
-months_since_acq = df.groupBy('months_since_acq').agg(countDistinct(col('account_code')).alias('count'))
-display(months_since_acq.orderBy('months_since_acq'))
+# months_since_acq = df.groupBy('months_since_acq').agg(countDistinct(col('account_code')).alias('count'))
+# display(months_since_acq.orderBy('months_since_acq'))
 
 # COMMAND ----------
 
@@ -488,7 +460,7 @@ display(months_since_acq.orderBy('months_since_acq'))
 
 # COMMAND ----------
 
-df.select('agg_participation_ind').distinct().show()
+# df.select('agg_participation_ind').distinct().show()
 
 # COMMAND ----------
 
@@ -497,7 +469,7 @@ df.select('agg_participation_ind').distinct().show()
 
 # COMMAND ----------
 
-df.select('participation_count').distinct().show()
+# df.select('participation_count').distinct().show()
 
 # COMMAND ----------
 
@@ -506,7 +478,7 @@ df.select('participation_count').distinct().show()
 
 # COMMAND ----------
 
-df.select('expires_within_90_days_ind').distinct().show()
+# df.select('expires_within_90_days_ind').distinct().show()
 
 # COMMAND ----------
 
@@ -515,7 +487,7 @@ df.select('expires_within_90_days_ind').distinct().show()
 
 # COMMAND ----------
 
-df.select('day_of_last_participation').distinct().show()
+# df.select('day_of_last_participation').distinct().show()
 
 # COMMAND ----------
 
@@ -524,7 +496,7 @@ df.select('day_of_last_participation').distinct().show()
 
 # COMMAND ----------
 
-df.select('days_since_last_participation').distinct().show()
+# df.select('days_since_last_participation').distinct().show()
 
 # COMMAND ----------
 
@@ -533,7 +505,7 @@ df.select('days_since_last_participation').distinct().show()
 
 # COMMAND ----------
 
-df.select('past_customize_participant').distinct().show()
+# df.select('past_customize_participant').distinct().show()
 
 # COMMAND ----------
 
@@ -542,7 +514,7 @@ df.select('past_customize_participant').distinct().show()
 
 # COMMAND ----------
 
-df.select('past_ecomm_participant').distinct().show()
+# df.select('past_ecomm_participant').distinct().show()
 
 # COMMAND ----------
 
@@ -551,8 +523,8 @@ df.select('past_ecomm_participant').distinct().show()
 
 # COMMAND ----------
 
-season_to_date = df.groupBy('season_to_date_participation').agg(countDistinct(col('account_code')).alias('count'))
-display(season_to_date.orderBy('season_to_date_participation'))
+# season_to_date = df.groupBy('season_to_date_participation').agg(countDistinct(col('account_code')).alias('count'))
+# display(season_to_date.orderBy('season_to_date_participation'))
 
 # COMMAND ----------
 
@@ -561,7 +533,7 @@ display(season_to_date.orderBy('season_to_date_participation'))
 
 # COMMAND ----------
 
-df.select('seasonality').distinct().show()
+# df.select('seasonality').distinct().show()
 
 # COMMAND ----------
 
@@ -570,7 +542,7 @@ df.select('seasonality').distinct().show()
 
 # COMMAND ----------
 
-df.select('participation_in_last_100_days').distinct().show()
+# df.select('participation_in_last_100_days').distinct().show()
 
 # COMMAND ----------
 
@@ -579,7 +551,7 @@ df.select('participation_in_last_100_days').distinct().show()
 
 # COMMAND ----------
 
-df.select('total_order_revenue').distinct().show()
+# df.select('total_order_revenue').distinct().show()
 
 # COMMAND ----------
 
@@ -588,7 +560,7 @@ df.select('total_order_revenue').distinct().show()
 
 # COMMAND ----------
 
-df.select('avg_order_revenue').distinct().show()
+# df.select('avg_order_revenue').distinct().show()
 
 # COMMAND ----------
 
@@ -597,7 +569,7 @@ df.select('avg_order_revenue').distinct().show()
 
 # COMMAND ----------
 
-df.select('last_order_revenue').distinct().show()
+# df.select('last_order_revenue').distinct().show()
 
 # COMMAND ----------
 
@@ -606,7 +578,7 @@ df.select('last_order_revenue').distinct().show()
 
 # COMMAND ----------
 
-df.select('participates_within_30_days').distinct().show()
+# df.select('participates_within_30_days').distinct().show()
 
 # COMMAND ----------
 
@@ -615,7 +587,7 @@ df.select('participates_within_30_days').distinct().show()
 
 # COMMAND ----------
 
-df.select('participates_within_30_days_ind').distinct().show()
+# df.select('participates_within_30_days_ind').distinct().show()
 
 # COMMAND ----------
 
@@ -624,7 +596,7 @@ df.select('participates_within_30_days_ind').distinct().show()
 
 # COMMAND ----------
 
-df.select('subscriber_days_prior_cume').distinct().orderBy('subscriber_days_prior_cume').show()
+# df.select('subscriber_days_prior_cume').distinct().orderBy('subscriber_days_prior_cume').show()
 
 # COMMAND ----------
 
