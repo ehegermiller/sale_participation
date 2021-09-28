@@ -260,26 +260,26 @@ df = df \
 # COMMAND ----------
 
 df = df \
-.withColumn('uc_age', when(col('uc_age').isNull(), 'N/A').when((col('uc_age') < 10) | (col('uc_age') > 80), 'Other').otherwise(col('uc_age'))) \
-.withColumn('uc_zipcode_median_income', when(col('uc_zipcode_median_income').isNull(), 'N/A').otherwise(col('uc_zipcode_median_income'))) \
-.withColumn('uc_user_region', when(col('uc_user_region').isNull(), 'N/A').otherwise(col('uc_user_region'))) \
-.withColumn('nps_base', when(col('nps_base').isNull(), 'N/A').otherwise(col('nps_base'))) \
-.withColumn('acq_discount_cohort', when(col('acq_discount_cohort').isNull(), 'N/A').otherwise(col('acq_discount_cohort'))) \
-.withColumn('acq_box_type', when(col('acq_box_type').isNull(), 'N/A').otherwise(col('acq_box_type'))) \
-.withColumn('acq_type', when(col('acq_type').isNull(), 'N/A').otherwise(col('acq_type'))) \
-.withColumn('addon_non_sub_coupon_code', when(col('addon_non_sub_coupon_code').isNull(), 'N/A').when(col('addon_non_sub_coupon_code') == '', 'Blank').otherwise(col('addon_non_sub_coupon_code'))) \
-.withColumn('edit_non_sub_coupon_code', when(col('edit_non_sub_coupon_code').isNull(), 'N/A').when(col('edit_non_sub_coupon_code') == '', 'Blank').otherwise(col('edit_non_sub_coupon_code'))) \
-.withColumn('promo_non_sub_coupon_code', when(col('promo_non_sub_coupon_code').isNull(), 'N/A').when(col('promo_non_sub_coupon_code') == '', 'Blank').otherwise(col('promo_non_sub_coupon_code'))) \
-.withColumn('shop_non_sub_coupon_code', when(col('shop_non_sub_coupon_code').isNull(), 'N/A').when(col('shop_non_sub_coupon_code') == '', 'Blank').otherwise(col('shop_non_sub_coupon_code'))) \
-.withColumn('csat_satisfied_ind', when(col('csat_satisfied_ind').isNull(), 'N/A').otherwise(col('csat_satisfied_ind'))) \
+.withColumn('uc_age', when(col('uc_age').isNull(), None).when((col('uc_age') < 10) | (col('uc_age') > 80), 'Other').otherwise(col('uc_age'))) \
+.withColumn('uc_zipcode_median_income', when(col('uc_zipcode_median_income').isNull(), None).otherwise(col('uc_zipcode_median_income'))) \
+.withColumn('uc_user_region', when(col('uc_user_region').isNull(), None).otherwise(col('uc_user_region'))) \
+.withColumn('nps_base', when(col('nps_base').isNull(), None).otherwise(col('nps_base'))) \
+.withColumn('acq_discount_cohort', when(col('acq_discount_cohort').isNull(), None).otherwise(col('acq_discount_cohort'))) \
+.withColumn('acq_box_type', when(col('acq_box_type').isNull(), None).otherwise(col('acq_box_type'))) \
+.withColumn('acq_type', when(col('acq_type').isNull(), None).otherwise(col('acq_type'))) \
+.withColumn('addon_non_sub_coupon_code', when(col('addon_non_sub_coupon_code').isNull(), None).otherwise(col('addon_non_sub_coupon_code'))) \
+.withColumn('edit_non_sub_coupon_code', when(col('edit_non_sub_coupon_code').isNull(), None).otherwise(col('edit_non_sub_coupon_code'))) \
+.withColumn('promo_non_sub_coupon_code', when(col('promo_non_sub_coupon_code').isNull(), None).otherwise(col('promo_non_sub_coupon_code'))) \
+.withColumn('shop_non_sub_coupon_code', when(col('shop_non_sub_coupon_code').isNull(), None).otherwise(col('shop_non_sub_coupon_code'))) \
+.withColumn('csat_satisfied_ind', when(col('csat_satisfied_ind').isNull(), None).otherwise(col('csat_satisfied_ind'))) \
 .withColumn('months_since_acq', round(col('months_since_acq'), 2)) \
-.withColumn('months_since_acq', when(col('months_since_acq').isNull(), 'N/A').otherwise(col('months_since_acq'))) \
-.withColumn('day_of_last_participation', when(col('day_of_last_participation').isNull(), 'N/A').otherwise(col('day_of_last_participation'))) \
-.withColumn('days_since_last_participation', when(col('days_since_last_participation').isNull(), 'N/A').otherwise(col('days_since_last_participation'))) \
-.withColumn('participation_in_last_100_days', when(col('participation_in_last_100_days').isNull(), 'N/A').otherwise(col('participation_in_last_100_days'))) \
-.withColumn('total_order_revenue', when(col('total_order_revenue').isNull(), 'N/A').otherwise(col('total_order_revenue'))) \
-.withColumn('avg_order_revenue', when(col('avg_order_revenue').isNull(), 'N/A').otherwise(col('avg_order_revenue'))) \
-.withColumn('last_order_revenue', when(col('last_order_revenue').isNull(), 'N/A').otherwise(col('last_order_revenue'))) \
+.withColumn('months_since_acq', when(col('months_since_acq').isNull(), None).otherwise(col('months_since_acq'))) \
+.withColumn('day_of_last_participation', when(col('day_of_last_participation').isNull(), None).otherwise(col('day_of_last_participation'))) \
+.withColumn('days_since_last_participation', when(col('days_since_last_participation').isNull(), None).otherwise(col('days_since_last_participation'))) \
+.withColumn('participation_in_last_100_days', when(col('participation_in_last_100_days').isNull(), None).otherwise(col('participation_in_last_100_days'))) \
+.withColumn('total_order_revenue', when(col('total_order_revenue').isNull(), None).otherwise(col('total_order_revenue'))) \
+.withColumn('avg_order_revenue', when(col('avg_order_revenue').isNull(), None).otherwise(col('avg_order_revenue'))) \
+.withColumn('last_order_revenue', when(col('last_order_revenue').isNull(), None).otherwise(col('last_order_revenue'))) \
 .withColumn('participates_within_30_days', when(col('participates_within_30_days').isNull(), 0).otherwise(col('participates_within_30_days'))) \
 .withColumn('participates_within_60_days', when(col('participates_within_60_days').isNull(), 0).otherwise(col('participates_within_60_days'))) \
 .withColumn('participates_within_90_days', when(col('participates_within_90_days').isNull(), 0).otherwise(col('participates_within_90_days'))) \
@@ -288,7 +288,7 @@ df = df \
 # COMMAND ----------
 
 # MAGIC %md 
-# MAGIC ## QA columns to confirm there are no nulls
+# MAGIC ## QA columns
 
 # COMMAND ----------
 
@@ -608,8 +608,7 @@ df = df \
 # Columns with empty values and NULLs
 from pyspark.sql.functions import isnan,when,count
 
-columns_with_nulls = df.agg(*[count(when(col(c).contains('None') | \
-                            col(c).contains('NULL') | \
+columns_with_nulls = df.agg(*[count(when(col(c).col(c).contains('NULL') | \
                             (col(c) == '' ) | \
                             col(c).isNull(), c 
                            )).alias(c)
